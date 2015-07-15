@@ -1,25 +1,248 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+title: "Five Minute Baby Steps"
+author: "Adam O'Dell"
+date: "Tuesday, July 14, 2015"
+output: html_document
 ---
 
+First things, first: let's load the data into a dataframe (df).
 
-## Loading and preprocessing the data
+```{r}
+
+df <- read.csv("activity.csv")
+
+```
+
+Next, we'll check to make sure the dimensions are what we expect (17568 x 3):
+
+```{r}
+dim(df)
+```
+
+And double-check the column/variable heading:
+
+```{r}
+names(df)
+```
+
+And glance at the "head" of the dataset:
+
+```{r}
+head(df)
+```
+
+All looks well. Now, let's do some analysis.
+
+First, we want to calculate the Total (i.e. sum) number of steps taken each day (TPD = TotalperDay).
+
+```{r}
+
+TPD <- aggregate(. ~ date, data =df, sum)
+TPD
+```
+
+Visual learners, like myself, will prefer to see that data as a histogram:
+
+```{r}
+Steps_Per_Day <- TPD$steps
+hist(Steps_Per_Day)
+```
+
+Next, let's compute two simple summary statistics: mean and median.
+
+```{r}
+
+steps_mean <- mean(Steps_Per_Day)
+steps_median <- median(Steps_Per_Day)
+
+steps_mean
+steps_median
+```
+
+Now, let's "drill down" and look more closely at each 5-minute interval.
+
+Just as we look at statistics for each data, let's do the same for each interval (API = AveragePerInterval).
+
+```{r}
+
+API <- aggregate(.~interval, data=df, mean)
+
+API
+```
+
+Again, a VISUAL will help...
+
+```{r}
+
+plot(API$interval, API$steps, type = "l")
+```
+
+Visually, it's easy to see the "spike" in steps.
+
+But if someone asked you, "Which specific interval averages the most steps?"
+
+We'd have to calculate that...
+
+```{r}
+
+MaxInterval <- API[which(API$steps == max(API$steps)),]
+MaxInterval
+
+```
+
+OK, so Interval #835 is the winner, with 206.2 steps on average.
+
+Now, let's move on to something altogether different.
+
+There seem to be some missing values (i.e. "NA"s) in our dataset. See...
+
+```{r}
+head(df)
+```
+
+Let's address those missing values.
 
 
+First, let's figure out how many rows within our dataset contain at least one missing value (i.e. "NA").
 
-## What is mean total number of steps taken per day?
+```{r}
+TotalNAs <- sum(is.na(df))
+TotalNAs
+```
 
+Wow, 2304 missing values... that's a lot.
 
+Let's now devise a simple strategy for replacing those missing values. There are many ways to do this.
 
-## What is the average daily activity pattern?
+I'll choose this one: replace any NA value with the value equal to the average value of the interval in question.  
 
+```{r}
 
+df_new <- df
 
-## Imputing missing values
+df_new$steps <- ifelse(is.na(df_new$steps) == TRUE, API$steps[API$interval %in% df_new$interval], df_new$steps)
 
+```
 
+Let's see if that worked...
 
-## Are there differences in activity patterns between weekdays and weekends?
+```{r}
+head(df_new)
+tail(df_new)
+sum(is.na(df_new))
+```
+
+Looks good to me!
+
+Now, let's make a histogram of the new dataframe, which is equivalent to the original dataframe, only with all the NAs replaced.
+
+```{r}
+TotalPerDay <- aggregate(. ~ date, data=df_new, sum)
+
+Steps_Per_Day <- TotalPerDay$steps
+hist(Steps_Per_Day)
+```
+
+Visually, that histogram looks just like the original histogram of Total Steps Per Day, which had missing NAs value.
+
+But let's be more precise. Calculating the mean and median of our new dataset, with NAs replaced, will help.
+
+```{r}
+new_mean <- mean(Steps_Per_Day)
+new_median <- median(Steps_Per_Day)
+
+new_mean
+new_median
+```
+Compared to the "original" values:
+
+```{r}
+steps_mean
+steps_median
+```
+
+The mean has not changed at all. And the median has changed only ever so slightly (basically, it hasn't changed).
+
+Sadly, it seems our replacement of the NAs had no effect... it was a waste of time (except I'm learning R!)
+
+Now, let's explore one last thing.
+
+I wonder if people take more steps on Weekdays versus Weekend Days.
+
+First, we have to create a new variable - one that defines the date variable as either: "Weekday" or "Weekend". That sounds like a "factor" variable with two levels.
+
+We'll start this work on our "NA-replaced" dataset (i.e. df_new)
+
+```{r}
+df_new$date <- as.Date(df_new$date)
+
+weekdays1 <- c('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday')
+
+df_new$wDay <- factor((weekdays(df_new$date) %in% weekdays1), levels = c(FALSE,TRUE), labels=c('Weekend','Weekday'))
+
+```
+
+Let's make sure our new variable is a "factor" variable:
+
+```{r}
+class(df_new$wDay)
+```
+
+And glance at the head of our new dataset:
+
+```{r}
+head(df_new)
+```
+
+Good, all looks well!
+
+Next, let's subset this dataset based on our Weekday/Weekend factor variable:
+
+```{r}
+
+weekend_set <- subset(df_new, wDay == "Weekend")
+
+weekday_set <- subset(df_new, wDay == "Weekday")
+
+```
+
+Now we can compute the Average Steps per Interval, for each subset:
+
+```{r}
+
+API_weekend <- aggregate(. ~ interval, data = weekend_set, mean)
+API_weekend$wDay <- factor("Weekend")
+
+API_weekday <- aggregate(. ~ interval, data = weekday_set, mean)
+API_weekday$wDay <- factor("Weekday")
+```
+
+Let's recombine those subsets, to make a Panel Plot easier.
+
+```{r}
+new_API <- rbind(API_weekend,API_weekday)
+```
+
+And, finally, make a Panel plot... comparing the diference in Average Steps per Interval for Weekdays versus Weekends:
+
+```{r}
+library(lattice)
+xyplot(steps ~ interval | wDay,
+        data = new_API,
+        type = "l",
+        xlab = "Interval",
+        ylab = "Average Steps",
+        layout = c(1,2))
+```
+
+Interesting!
+
+It seems that on Weekdays, more steps are taken between the 500 and 1000 intervals.
+
+But on Weekends, more steps are taken between the 1000 and 2000 intervals.
+
+Although, overall, the patterns of activity are very similar on both Weekdays and Weekends.
+
+This was a fun investigation of data!
+
+See you next time...
